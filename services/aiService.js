@@ -380,10 +380,12 @@ export async function getAiResponse(userId, user, userText, partner, mode = "nor
 
     chatHistory.set(userId, history);
 
-    await User.findOneAndUpdate(
-      { telegramId: user.telegramId },
-      { $inc: { chatCount: 1 } }
-    );
+    if (!user.hasActivePremium()) {
+      await User.findOneAndUpdate(
+        { telegramId: user.telegramId },
+        { $inc: { chatCount: 1 } }
+      );
+    }
 
     return { success: true, text: responseText };
   } catch (error) {

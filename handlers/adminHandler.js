@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import User from "../db/User.js";
 import Kanal from "../db/Kanal.js";
 import Click from "../db/click.js";
-import { adminState, tempData } from "../config/state.js";
+import { adminState, tempData, adminBroadcastData } from "../config/state.js";
 
 dotenv.config();
 
@@ -32,33 +32,93 @@ export async function handleAdminText(bot, ctx, text, userId) {
     return true;
   }
 
-  if (state === "send_message") {
-    adminState.delete(userId);
-    ctx.reply("⏳ Xabar yuborish boshlandi...");
-
-    const users = await User.find({});
-    let success = 0;
-    let blockedCount = 0;
-
-    for (const u of users) {
-      if (!u.telegramId) continue;
-      try {
-        await bot.telegram.sendMessage(u.telegramId, text);
-        success++;
-        await new Promise((res) => setTimeout(res, 40));
-      } catch (err) {
-        if (err.response && err.response.error_code === 403) {
-          blockedCount++;
-        }
-      }
+  // ==========================================
+  // 📤 XABAR YUBORISH (MATN YOKI RASM OLISH)
+  // ==========================================
+  if (state === "send_message_content") {
+    let draft = {};
+    if (ctx.message.photo) {
+      const photoArray = ctx.message.photo;
+      const photoId = photoArray[photoArray.length - 1].file_id;
+      draft = {
+        type: "photo",
+        photoId: photoId,
+        caption: ctx.message.caption || "",
+      };
+    } else if (text) {
+      draft = {
+        type: "text",
+        text: text,
+      };
+    } else {
+      await ctx.reply("⚠️ Iltimos, matnli xabar yoki rasm yuboring.");
+      return true;
     }
 
-    await ctx.reply(
-      `✅ <b>Xabar yuborish yakunlandi!</b>\n\n` +
-        `📥 Muvaffaqiyatli: ${success} ta\n` +
-        `🚫 Bloklaganlar: ${blockedCount} ta`,
-      { parse_mode: "HTML" }
-    );
+    adminBroadcastData.set(userId, draft);
+    adminState.set(userId, "await_broadcast_button_choice");
+
+    await ctx.reply("✅ Xabar qabul qilindi!\n\nXabarga <b>Inline Tugma (Button)</b> qo'shasizmi?", {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "➕ Inline Tugma qo'shish", callback_data: "admin_add_button" }],
+          [{ text: "🚀 Tugmasiz xabar yuborish", callback_data: "admin_send_now" }],
+          [{ text: "❌ Bekor qilish", callback_data: "cancel_send_message" }],
+        ],
+      },
+    });
+    return true;
+  }
+
+  // ==========================================
+  // ✍️ TUGMA MA'LUMOTINI QABUL QILISH (Formati: Nomi | Link)
+  // ==========================================
+  if (state === "await_broadcast_button_input") {
+    if (!text || !text.includes("|")) {
+      await ctx.reply(
+        "⚠️ Noto'g me'yor! Tugma nomi va linkni ajratish uchun <b>|</b> simvolidan foydalaning:\n\n<i>Masalan:</i> <code>Kanalimiz | https://t.me/kanal_linki</code>",
+        { parse_mode: "HTML" }
+      );
+      return true;
+    }
+
+    const parts = text.split("|");
+    const btnText = parts[0].trim();
+    let btnUrl = parts[1].trim();
+
+    if (!btnUrl.startsWith("http://") && !btnUrl.startsWith("https://")) {
+      btnUrl = `https://${btnUrl}`;
+    }
+
+    const draft = adminBroadcastData.get(userId) || {};
+    draft.buttonText = btnText;
+    draft.buttonUrl = btnUrl;
+    adminBroadcastData.set(userId, draft);
+
+    adminState.set(userId, "confirm_broadcast");
+
+    const replyMarkup = {
+      inline_keyboard: [
+        [{ text: btnText, url: btnUrl }],
+        [{ text: "🚀 Barchaga yuborishni tasdiqlash", callback_data: "admin_send_now" }],
+        [{ text: "❌ Bekor qilish", callback_data: "cancel_send_message" }],
+      ],
+    };
+
+    await ctx.reply("🔍 <b>Xabar ko'rinishi namunasi:</b>", { parse_mode: "HTML" });
+
+    if (draft.type === "photo") {
+      await ctx.replyWithPhoto(draft.photoId, {
+        caption: draft.caption,
+        reply_markup: replyMarkup,
+      });
+    } else {
+      await ctx.reply(draft.text, {
+        reply_markup: replyMarkup,
+      });
+    }
+
     return true;
   }
 
@@ -109,6 +169,7 @@ export async function handleAdminText(bot, ctx, text, userId) {
 
   if (text === "📊 Statistika") {
     const usersCount = await User.countDocuments();
+    const premiumCount = await User.countDocuments({ isPremium: true });
     const channelsCount = await Kanal.countDocuments({
       url: { $exists: true, $ne: null },
     });
@@ -122,6 +183,7 @@ export async function handleAdminText(bot, ctx, text, userId) {
     await ctx.reply(
       `📊 <b>Statistika</b>\n\n` +
         `👥 Foydalanuvchilar: ${usersCount}\n` +
+        `👑 VIP Premium a'zolar: ${premiumCount}\n` +
         `📢 Kanallar: ${channelsCount}\n` +
         `🖼 Rasmlar: ${rasmsCount}\n\n` +
         `📊 Clicks: ${totalClicks?.clicks || 0}`,
@@ -166,19 +228,24 @@ export async function handleAdminText(bot, ctx, text, userId) {
   }
 
   if (text === "📤 Habar yuborish") {
-    adminState.set(userId, "send_message");
-    await ctx.reply("✍️ Yubormoqchi bo'lgan xabaringizni kiriting:", {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "❌ Bekor qilish",
-              callback_data: "cancel_send_message",
-            },
+    adminState.set(userId, "send_message_content");
+    adminBroadcastData.delete(userId);
+    await ctx.reply(
+      "✍️ <b>Yubormoqchi bo'lgan xabaringizni kiriting.</b>\n\nSiz <b>matnli xabar</b> yoki <b>rasm (caption/sarlavha bilan)</b> yuborishingiz mumkin:",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "❌ Bekor qilish",
+                callback_data: "cancel_send_message",
+              },
+            ],
           ],
-        ],
-      },
-    });
+        },
+      }
+    );
     return true;
   }
 
@@ -186,6 +253,64 @@ export async function handleAdminText(bot, ctx, text, userId) {
 }
 
 export async function handleAdminCallback(bot, ctx, data, userId) {
+  if (data === "admin_add_button") {
+    adminState.set(userId, "await_broadcast_button_input");
+    await ctx.answerCbQuery();
+    return ctx.editMessageText(
+      "✍️ Tugma matni va linkini quyidagi ko'rinishda yuboring:\n\n<code>Tugma nomi | https://t.me/kanal_linki</code>",
+      { parse_mode: "HTML" }
+    );
+  }
+
+  if (data === "admin_send_now") {
+    await ctx.answerCbQuery();
+    const draft = adminBroadcastData.get(userId);
+    adminState.delete(userId);
+    adminBroadcastData.delete(userId);
+
+    if (!draft) return ctx.reply("❌ Yuborish uchun xabar topilmadi.");
+
+    await ctx.reply("⏳ Xabar yuborish boshlandi...");
+
+    const users = await User.find({});
+    let success = 0;
+    let blockedCount = 0;
+
+    const extra = {};
+    if (draft.buttonText && draft.buttonUrl) {
+      extra.reply_markup = {
+        inline_keyboard: [[{ text: draft.buttonText, url: draft.buttonUrl }]],
+      };
+    }
+
+    for (const u of users) {
+      if (!u.telegramId) continue;
+      try {
+        if (draft.type === "photo") {
+          await bot.telegram.sendPhoto(u.telegramId, draft.photoId, {
+            caption: draft.caption,
+            ...extra,
+          });
+        } else {
+          await bot.telegram.sendMessage(u.telegramId, draft.text, extra);
+        }
+        success++;
+        await new Promise((res) => setTimeout(res, 40));
+      } catch (err) {
+        if (err.response && err.response.error_code === 403) {
+          blockedCount++;
+        }
+      }
+    }
+
+    return ctx.reply(
+      `✅ <b>Xabar yuborish yakunlandi!</b>\n\n` +
+        `📥 Muvaffaqiyatli: ${success} ta\n` +
+        `🚫 Bloklaganlar: ${blockedCount} ta`,
+      { parse_mode: "HTML" }
+    );
+  }
+
   if (data.startsWith("del_channel_")) {
     const channelId = data.replace("del_channel_", "");
     await Kanal.findByIdAndDelete(channelId);
@@ -251,6 +376,7 @@ export async function handleAdminCallback(bot, ctx, data, userId) {
 
   if (data === "cancel_send_message") {
     adminState.delete(userId);
+    adminBroadcastData.delete(userId);
     await ctx.answerCbQuery();
     return ctx.editMessageText("❌ Xabar yuborish bekor qilindi.");
   }

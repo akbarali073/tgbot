@@ -3,6 +3,11 @@ import { userState } from "../config/state.js";
 import { handleAdminText, handleAdminCallback } from "./adminHandler.js";
 import { handleVideoText, handleVideoCallback } from "./videoHandler.js";
 import { handleTanishuvText, handleTanishuvCallback } from "./tanishuvHandler.js";
+import {
+  handlePremiumText,
+  handlePremiumCallback,
+  handleSuccessfulPayment,
+} from "./premiumHandler.js";
 import { forwardMessageToPartner } from "../services/matchService.js";
 import { comand } from "../bot/comand.js";
 
@@ -13,13 +18,24 @@ export function setupMainHandlers(bot) {
     console.error(`[Telegraf Error] Update: ${ctx.updateType}`, err);
   });
 
-  // Handle all incoming messages (text, photos, stickers, voices, etc.)
+  // Handle Telegram Stars Pre-Checkout Query
+  bot.on("pre_checkout_query", (ctx) => {
+    ctx.answerPreCheckoutQuery(true).catch(console.error);
+  });
+
+  // Handle all incoming messages (text, photos, stickers, voices, payments, etc.)
   bot.on("message", async (ctx) => {
     try {
       if (!ctx.from?.id) return;
 
       const userId = ctx.from.id.toString();
       const text = ctx.message.text || "";
+
+      // Handle successful Telegram Stars Payment
+      if (ctx.message.successful_payment) {
+        await handleSuccessfulPayment(bot, ctx);
+        return;
+      }
 
       let dbUser = await User.findOne({ telegramId: userId });
       if (!dbUser) {
@@ -28,7 +44,7 @@ export function setupMainHandlers(bot) {
 
       // If user is in real_chatting state and sends media or text (not /stop)
       if (userState.get(userId) === "real_chatting" && text !== "/stop") {
-        await forwardMessageToPartner(bot, ctx, userId);
+        await forwardMessageToPartner(bot, ctx, userId, dbUser);
         return;
       }
 
@@ -36,15 +52,19 @@ export function setupMainHandlers(bot) {
       const isAdminHandled = await handleAdminText(bot, ctx, text, userId);
       if (isAdminHandled) return;
 
-      // 2. Tanishuv Handler (onboarding, /stop, AI chat, search)
+      // 2. Premium (VIP) Handler
+      const isPremiumHandled = await handlePremiumText(bot, ctx, text, userId, dbUser);
+      if (isPremiumHandled) return;
+
+      // 3. Tanishuv Handler (onboarding, /stop, AI chat, search)
       const isTanishuvHandled = await handleTanishuvText(bot, ctx, text, userId, dbUser);
       if (isTanishuvHandled) return;
 
-      // 3. Video Handler
+      // 4. Video Handler
       const isVideoHandled = await handleVideoText(ctx, text, userId);
       if (isVideoHandled) return;
 
-      // 4. Default command handler fallback
+      // 5. Default command handler fallback
       if (text) {
         return await comand(ctx);
       }
@@ -59,15 +79,24 @@ export function setupMainHandlers(bot) {
       const userId = ctx.from.id.toString();
       const data = ctx.callbackQuery.data;
 
+      let dbUser = await User.findOne({ telegramId: userId });
+      if (!dbUser) {
+        dbUser = await User.create({ telegramId: userId });
+      }
+
       // 1. Admin Callback Handler
       const isAdminHandled = await handleAdminCallback(bot, ctx, data, userId);
       if (isAdminHandled) return;
 
-      // 2. Tanishuv Callback Handler
-      const isTanishuvHandled = await handleTanishuvCallback(ctx, data, userId);
+      // 2. Premium Callback Handler
+      const isPremiumHandled = await handlePremiumCallback(bot, ctx, data, userId, dbUser);
+      if (isPremiumHandled) return;
+
+      // 3. Tanishuv Callback Handler
+      const isTanishuvHandled = await handleTanishuvCallback(ctx, data, userId, bot);
       if (isTanishuvHandled) return;
 
-      // 3. Video Callback Handler
+      // 4. Video Callback Handler
       const isVideoHandled = await handleVideoCallback(ctx, data, userId);
       if (isVideoHandled) return;
 

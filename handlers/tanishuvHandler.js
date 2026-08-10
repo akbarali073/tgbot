@@ -13,6 +13,7 @@ import {
   forwardMessageToPartner,
 } from "../services/matchService.js";
 import { sendSubscriptionChannels } from "./videoHandler.js";
+import { CITIES } from "./premiumHandler.js";
 
 /**
  * Handles text input related to Tanishuv (onboarding steps, /stop, active real/AI chats).
@@ -21,7 +22,7 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
   const currentState = userState.get(userId);
 
   // ==========================================
-  // 1. ISM VA YOSHNI OLISH BOSQICHLARI
+  // 1. ISM, YOSH VA VILOYATNI OLISH BOSQICHLARI
   // ==========================================
   if (currentState === "awaiting_name") {
     tempUserData.set(userId, { name: text });
@@ -42,25 +43,22 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
       return true;
     }
 
-    const temp = tempUserData.get(userId);
-    const updatedUser = await User.findOneAndUpdate(
-      { telegramId: userId },
-      { name: temp?.name || "Foydalanuvchi", age: age },
-      { returnDocument: "after" }
-    );
+    const temp = tempUserData.get(userId) || {};
+    temp.age = age;
+    tempUserData.set(userId, temp);
 
-    userState.delete(userId);
-    tempUserData.delete(userId);
+    userState.set(userId, "awaiting_city");
+
+    const cityButtons = CITIES.map((c) => [{ text: `📍 ${c}`, callback_data: `onboard_city_${c}` }]);
 
     await ctx.reply(
-      `🎉 Ma'lumotlaringiz saqlandi!\n\n` +
-        `📝 <b>Ism:</b> ${updatedUser.name}\n` +
-        `🎂 <b>Yosh:</b> ${updatedUser.age}`,
-      { parse_mode: "HTML" }
+      `Ajoyib! Endi yashaydigan viloyatingizni tanlang:`,
+      {
+        reply_markup: {
+          inline_keyboard: cityButtons,
+        },
+      }
     );
-
-    // Qidiruvni boshlash
-    await startUserSearch(bot, ctx, updatedUser);
     return true;
   }
 
@@ -110,7 +108,7 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
       return true;
     }
 
-    // Sherik qidiruvni boshlaymiz (real foydalanuvchi -> topilmasa 10-15 min ichida AI)
+    // Sherik qidiruvni boshlaymiz
     await startUserSearch(bot, ctx, dbUser);
     return true;
   }
@@ -147,7 +145,7 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
   // 4. REAL FOYDALANUVCHILAR CHATI
   // ==========================================
   if (currentState === "real_chatting") {
-    await forwardMessageToPartner(bot, ctx, userId);
+    await forwardMessageToPartner(bot, ctx, userId, dbUser);
     return true;
   }
 
@@ -155,7 +153,8 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
   // 5. AI CHAT
   // ==========================================
   if (currentState === "ai_chatting") {
-    if (dbUser.chatCount >= 5) {
+    // Premium a'zolar uchun limit yo'q! Oddiy foydalanuvchilar uchun 5 xabar limit.
+    if (!dbUser.hasActivePremium() && dbUser.chatCount >= 5) {
       await sendSubscriptionChannels(ctx);
       return true;
     }
@@ -199,9 +198,9 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
 }
 
 /**
- * Handles callback queries related to Tanishuv (gender choice).
+ * Handles callback queries related to Tanishuv (gender choice, onboard city choice).
  */
-export async function handleTanishuvCallback(ctx, data, userId) {
+export async function handleTanishuvCallback(ctx, data, userId, bot) {
   if (data === "gender_male" || data === "gender_female") {
     const selectedGender = data === "gender_male" ? "male" : "female";
     await User.findOneAndUpdate(
@@ -215,6 +214,37 @@ export async function handleTanishuvCallback(ctx, data, userId) {
     await ctx.editMessageText("📝 Ajoyib! Endi **Ismingizni** kiriting:", {
       parse_mode: "Markdown",
     });
+    return true;
+  }
+
+  if (data.startsWith("onboard_city_")) {
+    const selectedCity = data.replace("onboard_city_", "");
+    const temp = tempUserData.get(userId) || {};
+
+    const updatedUser = await User.findOneAndUpdate(
+      { telegramId: userId },
+      {
+        name: temp.name || "Foydalanuvchi",
+        age: temp.age || 20,
+        city: selectedCity,
+      },
+      { returnDocument: "after" }
+    );
+
+    userState.delete(userId);
+    tempUserData.delete(userId);
+
+    await ctx.answerCbQuery("✅ Saqlandi!");
+
+    await ctx.editMessageText(
+      `🎉 <b>Ma'lumotlaringiz saqlandi!</b>\n\n` +
+        `📝 <b>Ism:</b> ${updatedUser.name}\n` +
+        `🎂 <b>Yosh:</b> ${updatedUser.age}\n` +
+        `📍 <b>Viloyat:</b> ${updatedUser.city}`,
+      { parse_mode: "HTML" }
+    );
+
+    await startUserSearch(bot, ctx, updatedUser);
     return true;
   }
 

@@ -16,7 +16,7 @@ export const userKeyboard = {
     keyboard: [
       [{ text: "🔞 Uzbekcha Video" }, { text: "🔞 Ruscha Video (top)" }],
       [{ text: "Barchasini ko'rish 💦" }],
-      [{ text: "💬 Tanishuv" }],
+      [{ text: "💬 Tanishuv" }, { text: "💎 Premium (VIP)" }],
     ],
     resize_keyboard: true,
     one_time_keyboard: false,
