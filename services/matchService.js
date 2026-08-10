@@ -135,7 +135,7 @@ export async function startUserSearch(bot, ctx, dbUser) {
 
   await ctx.reply(
     `🔎 ${vipBadgeMsg}<b>Tanishish uchun real sherik qidirilmoqda...</b> Kuting.\n\n` +
-      `⏱ <i>Agar 10-15 minut ichida tanishish uchun sherik topilmasa, avtomatik AI bilan tanishuv chat ochiladi.</i>\n\n` +
+      `⏱ <i>Suhbatdosh qidirilmoqda.</i>\n\n` +
       `❌ Qidiruvni bekor qilish uchun: <code>/stop</code> deb yozing.`,
     { parse_mode: "HTML" },
   );
