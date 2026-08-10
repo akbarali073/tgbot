@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Boshqaruv Paneli</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background-color: #0d1117;
+        color: #f8f8f8;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        min-height: 100vh;
+        padding: 30px 20px;
+      }
+
+      h1 {
+        text-align: center;
+        margin-bottom: 20px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+
+      /* Navigation Tugmalari / Tabs */
+      .nav-tabs {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 30px;
+      }
+
+      .tab-btn {
+        background-color: #161b22;
+        color: #8b949e;
+        border: 1px solid #30363d;
+        padding: 10px 24px;
+        font-size: 1rem;
+
+        font-weight: 600;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .tab-btn:hover {
+        background-color: #21262d;
+        color: #f8f8f8;
+      }
+
+      .tab-btn.active {
+        background-color: #238636;
+        color: #ffffff;
+        border-color: #2ea043;
+      }
+
+      .container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      /* Rasmlar Card Dizayni */
+      .card {
+        background-color: #161b22;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #30363d;
+        transition: transform 0.25s ease;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .card:hover {
+        transform: translateY(-4px);
+      }
+
+      .card img {
+        width: 100%;
+        height: 380px;
+        object-fit: cover;
+        display: block;
+      }
+
+      .card-info {
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .card span {
+        font-size: 0.85rem;
+        color: #8b949e;
+        word-break: break-all;
+      }
+
+      .delete-btn {
+        background-color: #da3633;
+        color: #ffffff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s;
+      }
+
+      .delete-btn:hover {
+        background-color: #f85149;
+      }
+
+      /* Foydalanuvchilar Card Dizayni */
+      .user-card {
+        background-color: #161b22;
+        border-radius: 12px;
+        overflow: hidden;
+        padding: 20px;
+        border: 1px solid #30363d;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .user-card h3 {
+        font-size: 1.1rem;
+        color: #58a6ff;
+      }
+
+      .user-card p {
+        font-size: 0.9rem;
+        color: #8b949e;
+      }
+
+      .error-msg {
+        grid-column: 1 / -1;
+        text-align: center;
+        color: #f85149;
+        font-size: 1.1rem;
+        padding: 40px;
+      }
+      #alluser {
+        color: #0d1117;
+        background-color: white;
+        padding: 12px 20px;
+        border-radius: 14px;
+        margin-bottom: 20px;
+        position: sticky;
+        top: 20px;
+      }
+      .gender {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navigatsiya tugmalari -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" id="btn-img" onclick="switchTab('img')">
+        🖼 Rasmlar
+      </button>
+      <button class="tab-btn" id="btn-users" onclick="switchTab('users')">
+        👥 Foydalanuvchilar
+      </button>
+    </div>
+
+    <h1 id="page-title">Rasmlar Galereyasi</h1>
+    <div class="gender">
+      <div>
+        <span id="alluser">0</span>
+      </div>
+      <div>
+        <p id="male"></p>
+        <p id="fmale"></p>
+      </div>
+    </div>
+
+    <div class="container"></div>
+
+    <script>
+      const con = document.querySelector(".container");
+      const pageTitle = document.getElementById("page-title");
+      const btnImg = document.getElementById("btn-img");
+      const btnUsers = document.getElementById("btn-users");
+      const alluser = document.getElementById("alluser");
+      const maleid = document.getElementById("male");
+      const fmaleid = document.getElementById("fmale");
+
+      let currentTab = "img"; // Standart holat: Rasmlar
+
+      // Bo'limlar o'rtasida o'tish funksiyasi
+      function switchTab(tab) {
+        currentTab = tab;
+        if (tab === "img") {
+          btnImg.classList.add("active");
+          btnUsers.classList.remove("active");
+          pageTitle.textContent = "Rasmlar Galereyasi";
+          getIMG();
+        } else {
+          btnUsers.classList.add("active");
+          btnImg.classList.remove("active");
+          pageTitle.textContent = "Foydalanuvchilar Ro'yxati";
+          getUser();
+        }
+      }
+
+      // 1. Rasmlarni yuklash
+      async function getIMG() {
+        try {
+          con.innerHTML =
+            "<p style='text-align:center; grid-column:1/-1;'>Yuklanmoqda...</p>";
+          const response = await fetch("http://localhost:4000/img");
+          const data = await response.json();
+
+          con.innerHTML = "";
+
+          if (!data || data.length === 0) {
+            con.innerHTML = "<p class='error-msg'>Rasmlar topilmadi.</p>";
+            return;
+          }
+
+          data.forEach((item) => {
+            const card = document.createElement("div");
+            card.className = "card";
+
+            const img = document.createElement("img");
+            img.src = item.imgurl;
+            img.alt = "Rasm";
+            img.loading = "lazy";
+
+            const info = document.createElement("div");
+            info.className = "card-info";
+
+            const spa = document.createElement("span");
+            spa.textContent = item._id;
+
+            const views = document.createElement("p");
+            views.textContent = item.views;
+
+            const hajmi = document.createElement("p");
+            hajmi.textContent = `${item.hajmi} mb`;
+
+            const btn = document.createElement("button");
+            btn.className = "delete-btn";
+            btn.textContent = "O'chirish";
+
+            btn.addEventListener("click", () => {
+              deleteImage(item._id);
+            });
+
+            info.appendChild(spa);
+            info.appendChild(btn);
+
+            card.appendChild(img);
+            card.appendChild(info);
+            card.appendChild(views);
+            card.appendChild(hajmi);
+
+            con.appendChild(card);
+          });
+        } catch (error) {
+          console.error("Xatolik yuz berdi:", error);
+          con.innerHTML =
+            "<p class='error-msg'>Rasmlarni yuklashda xatolik bo'ldi.</p>";
+        }
+      }
+
+      // 2. Foydalanuvchilarni yuklash
+      // 2. Foydalanuvchilarni yuklash
+      async function getUser() {
+        try {
+          con.innerHTML =
+            "<p style='text-align:center; grid-column:1/-1;'>Yuklanmoqda...</p>";
+          const response = await fetch("http://localhost:4000/user");
+          const users = await response.json();
+
+          con.innerHTML = "";
+
+          if (!users || users.length === 0) {
+            con.innerHTML =
+              "<p class='error-msg'>Foydalanuvchilar topilmadi.</p>";
+            alluser.textContent = "0";
+            maleid.textContent = "Erkaklar: 0";
+            fmaleid.textContent = "Ayollar: 0";
+            return;
+          }
+
+          // Gender bo'yicha hisoblash
+          const maleCount = users.filter(
+            (u) => u.gender === "male" || u.gender === "erkak",
+          ).length;
+          const femaleCount = users.filter(
+            (u) => u.gender === "female" || u.gender === "ayol",
+          ).length;
+
+          // Statistikalarni chiqarish
+          alluser.textContent = `Jami foydalanuvchilar: ${users.length}`;
+          maleid.textContent = `👨 Erkaklar: ${maleCount}`;
+          fmaleid.textContent = `👩 Ayollar: ${femaleCount}`;
+
+          // Card'larni yaratish
+          users.forEach((u) => {
+            const card = document.createElement("div");
+            card.className = "user-card";
+
+            card.innerHTML = `
+        <h3>👤 ${u.firstName || u.username || "Foydalanuvchi"}</h3>
+        <p>🧬 Gender: ${u.gender || "Tanlanmadi ❌"}</p>
+        <p><b>ID:</b> ${u._id}</p>
+        <p><b>Telegram ID:</b> ${u.telegramId || u.id || "Mavjud emas"}</p>
+      `;
+
+            con.appendChild(card);
+          });
+        } catch (error) {
+          console.error("Foydalanuvchilarni yuklash xatosi:", error);
+          con.innerHTML =
+            "<p class='error-msg'>Foydalanuvchilarni yuklashda xatolik bo'ldi.</p>";
+        }
+      }
+      // 3. Rasmni o'chirish funksiyasi
+      async function deleteImage(id) {
+        if (!confirm("Haqiqatan ham bu rasmni o'chirmoqchimisiz?")) return;
+
+        try {
+          const response = await fetch(`http://localhost:4000/${id}`, {
+            method: "DELETE",
+          });
+
+          if (response.ok) {
+            getIMG();
+          } else {
+            alert("O'chirishda xatolik yuz berdi");
+          }
+        } catch (error) {
+          console.error("O'chirish xatosi:", error);
+        }
+      }
+
+      // Dastlab rasmlarni yuklaymiz
+      getIMG();
+    </script>
+  </body>
+</html>
