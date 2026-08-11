@@ -98,8 +98,8 @@ export async function startUserSearch(bot, ctx, dbUser) {
     activeRealPartners.set(userId, partnerId);
     activeRealPartners.set(partnerId, userId);
 
-    const userAVipBadge = isVip ? "(💎 VIP ) " : "";
-    const partnerVipBadge = partnerDbUser.hasActivePremium() ? "👑 VIP " : "";
+    const userAVipBadge = isVip ? "👑 VIP" : "";
+    const partnerVipBadge = partnerDbUser.hasActivePremium() ? "💎 VIP " : "";
 
     // Notify User A
     await ctx.reply(
@@ -107,21 +107,28 @@ export async function startUserSearch(bot, ctx, dbUser) {
         `👤 <b>Ismi:</b> ${partnerVipBadge}${partnerDbUser.name || "Noma'lum"}\n` +
         `🎂 <b>Yoshi:</b> ${partnerDbUser.age || "Noma'lum"}\n` +
         `📍 <b>Viloyat:</b> ${partnerDbUser.city || "Ko'rsatilmagan"}\n\n` +
-        `💬 Xabaringizni yozing, u sherigingizga yetkaziladi. \n`,
+        `💬 Xabaringizni yozing, u sherigingizga yetkaziladi.\n`,
       { parse_mode: "HTML", ...tanishuvKeyboard },
     );
 
-    // Notify User B
-    await bot.telegram.sendMessage(
-      partnerId,
-      `🎉 <b>Sizga ajoyib sherik topildi!</b>\n\n` +
+    // Notify User B (VIP va Oddiy foydalanuvchi uchun alohida xabar matni)
+    const partnerNotificationMsg = isVip
+      ? `🎉 <b>Sizga ajoyib sherik topildi!</b>\n\n` +
         `<blockquote>👑 <b>VIP SUHBATDOSH!</b>\n\n` +
-        `👤 <b>Ismi:</b> ${dbUser.name || "Noma'lum"}               ${userAVipBadge}\n` +
+        `👤 <b>Ismi:</b> ${dbUser.name || "Noma'lum"}.               ${userAVipBadge}\n` +
         `🎂 <b>Yoshi:</b> ${dbUser.age || "Noma'lum"}\n` +
         `📍 <b>Viloyat:</b> ${dbUser.city || "Ko'rsatilmagan"}</blockquote>\n\n` +
-        `💬 <i>Bu foydalanuvchi botimizning VIP a'zosi. Suhbatni boshlash uchun xabaringizni yozing!</i>`,
-      { parse_mode: "HTML", ...tanishuvKeyboard },
-    );
+        `💬 <i>Bu foydalanuvchi botimizning VIP a'zosi. Suhbatni boshlash uchun xabaringizni yozing!</i>`
+      : `🎉 <b>Sizga ajoyib sherik topildi!</b>\n\n` +
+        `👤 <b>Ismi:</b> ${dbUser.name || "Noma'lum"}\n` +
+        `🎂 <b>Yoshi:</b> ${dbUser.age || "Noma'lum"}\n` +
+        `📍 <b>Viloyat:</b> ${dbUser.city || "Ko'rsatilmagan"}\n\n` +
+        `💬 Xabaringizni yozing, u sherigingizga yetkaziladi.`;
+
+    await bot.telegram.sendMessage(partnerId, partnerNotificationMsg, {
+      parse_mode: "HTML",
+      ...tanishuvKeyboard,
+    });
     return;
   }
 
