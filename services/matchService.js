@@ -1,6 +1,11 @@
 import { userState, activePartner } from "../config/state.js";
-import { getRandomPartner } from "../config/partners.js";
+import {
+  getRandomPartner,
+  femalePartners,
+  malePartners,
+} from "../config/partners.js";
 import { startInitialGreetingTimer } from "./aiService.js";
+import { tanishuvKeyboard, userKeyboard } from "../keyboard/keyboard.js";
 
 // Queue of real users waiting for a partner: array of { userId, dbUser }
 const waitingQueue = [];
@@ -67,8 +72,8 @@ export async function startUserSearch(bot, ctx, dbUser) {
 
   if (userState.get(userId) === "searching_partner") {
     return ctx.reply(
-      "🔎 Siz allaqachon sherik qidiryapsiz... Kuting.\n\n❌ Bekor qilish uchun: /stop",
-      { parse_mode: "HTML" },
+      "🔎 Siz allaqachon sherik qidiryapsiz... Kuting.\n\n❌ Bekor qilish uchun: 🛑 Stop bosing.",
+      { parse_mode: "HTML", ...tanishuvKeyboard },
     );
   }
 
@@ -93,7 +98,7 @@ export async function startUserSearch(bot, ctx, dbUser) {
     activeRealPartners.set(userId, partnerId);
     activeRealPartners.set(partnerId, userId);
 
-    const userAVipBadge = isVip ? "👑 VIP " : "";
+    const userAVipBadge = isVip ? "(💎 VIP ) " : "";
     const partnerVipBadge = partnerDbUser.hasActivePremium() ? "👑 VIP " : "";
 
     // Notify User A
@@ -102,23 +107,21 @@ export async function startUserSearch(bot, ctx, dbUser) {
         `👤 <b>Ismi:</b> ${partnerVipBadge}${partnerDbUser.name || "Noma'lum"}\n` +
         `🎂 <b>Yoshi:</b> ${partnerDbUser.age || "Noma'lum"}\n` +
         `📍 <b>Viloyat:</b> ${partnerDbUser.city || "Ko'rsatilmagan"}\n\n` +
-        `💬 Xabaringizni yozing, u sherigingizga yetkaziladi.\n` +
-        `❌ Suhbatni yakunlash uchun: <code>/stop</code> deb yozing.`,
-      { parse_mode: "HTML" },
+        `💬 Xabaringizni yozing, u sherigingizga yetkaziladi. \n`,
+      { parse_mode: "HTML", ...tanishuvKeyboard },
     );
 
     // Notify User B
     await bot.telegram.sendMessage(
       partnerId,
-      `🎉 <b>Real sherik topildi!</b>\n\n` +
-        `👤 <b>Ismi:</b> ${userAVipBadge}${dbUser.name || "Noma'lum"}\n` +
+      `🎉 <b>Sizga ajoyib sherik topildi!</b>\n\n` +
+        `<blockquote>👑 <b>VIP SUHBATDOSH!</b>\n\n` +
+        `👤 <b>Ismi:</b> ${dbUser.name || "Noma'lum"}               ${userAVipBadge}\n` +
         `🎂 <b>Yoshi:</b> ${dbUser.age || "Noma'lum"}\n` +
-        `📍 <b>Viloyat:</b> ${dbUser.city || "Ko'rsatilmagan"}\n\n` +
-        `💬 Xabaringizni yozing, u sherigingizga yetkaziladi.\n` +
-        `❌ Suhbatni yakunlash uchun: <code>/stop</code> deb yozing.`,
-      { parse_mode: "HTML" },
+        `📍 <b>Viloyat:</b> ${dbUser.city || "Ko'rsatilmagan"}</blockquote>\n\n` +
+        `💬 <i>Bu foydalanuvchi botimizning VIP a'zosi. Suhbatni boshlash uchun xabaringizni yozing!</i>`,
+      { parse_mode: "HTML", ...tanishuvKeyboard },
     );
-
     return;
   }
 
@@ -136,8 +139,8 @@ export async function startUserSearch(bot, ctx, dbUser) {
   await ctx.reply(
     `🔎 ${vipBadgeMsg}<b>Tanishish uchun real sherik qidirilmoqda...</b> Kuting.\n\n` +
       `⏱ <i>Suhbatdosh qidirilmoqda.</i>\n\n` +
-      `❌ Qidiruvni bekor qilish uchun: <code>/stop</code> deb yozing.`,
-    { parse_mode: "HTML" },
+      `❌ Qidiruvni bekor qilish uchun 🛑 Stop bosing.`,
+    { parse_mode: "HTML", ...tanishuvKeyboard },
   );
 
   // 10-15 min fallback timer to AI
@@ -157,6 +160,10 @@ export async function startUserSearch(bot, ctx, dbUser) {
         let partner;
         if (isVip && dbUser.selectedAiPartner) {
           partner = { name: dbUser.selectedAiPartner, age: 20 };
+        } else if (isVip && dbUser.prefGender && dbUser.prefGender !== "any") {
+          const targetList =
+            dbUser.prefGender === "female" ? femalePartners : malePartners;
+          partner = targetList[Math.floor(Math.random() * targetList.length)];
         } else {
           partner = getRandomPartner(dbUser.gender || "male");
         }
@@ -168,8 +175,8 @@ export async function startUserSearch(bot, ctx, dbUser) {
           userId,
           `🌸 <b>Hozircha real sherik bo'sh emas edi.</b> Siz uchun sun'iy intellekt hamrohingiz <b>${partner.name} (${partner.age} yosh)</b> bilan suhbat ochildi!\n\n` +
             `Unga biror narsa deb yozing (Masalan: <i>Salom, yaxshimisiz?</i>)\n\n` +
-            `❌ Suhbatdan chiqish uchun: <code>/stop</code> deb yozing.`,
-          { parse_mode: "HTML" },
+            `❌ Suhbatdan chiqish uchun: 🛑 Stop deb yozing.`,
+          { parse_mode: "HTML", ...tanishuvKeyboard },
         );
 
         startInitialGreetingTimer(bot, ctx, userId, dbUser);
@@ -205,6 +212,7 @@ export async function stopRealChat(bot, userId) {
       await bot.telegram.sendMessage(
         partnerId,
         "🚪 Suhbatdosh suhbatni yakunladi. Asosiy menuga qaytdingiz.",
+        userKeyboard,
       );
     } catch (e) {
       console.error("Error sending stop notification to partner:", e.message);

@@ -1,6 +1,10 @@
 import User from "../db/User.js";
 import { userState, tempUserData, activePartner } from "../config/state.js";
-import { getRandomPartner } from "../config/partners.js";
+import {
+  getRandomPartner,
+  femalePartners,
+  malePartners,
+} from "../config/partners.js";
 import {
   getAiResponse,
   resetInactivityTimer,
@@ -14,6 +18,26 @@ import {
 } from "../services/matchService.js";
 import { sendSubscriptionChannels } from "./videoHandler.js";
 import { CITIES } from "./premiumHandler.js";
+import { tanishuvKeyboard, userKeyboard } from "../keyboard/keyboard.js";
+
+export async function promptVipGenderChoice(ctx) {
+  await ctx.reply(
+    `👑 <b>VIP Sherik Tanlovi</b>\n\n` +
+      `Tanishuvni boshlashdan oldin, qaysi jinsdagi sherik bilan tanishishni xohlaysiz?`,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "👩 Qiz bola", callback_data: "tanishuv_pref_female" },
+            { text: "👨 O'g'il bola", callback_data: "tanishuv_pref_male" },
+          ],
+          [{ text: "🌐 Farqi yo'q", callback_data: "tanishuv_pref_any" }],
+        ],
+      },
+    },
+  );
+}
 
 /**
  * Handles text input related to Tanishuv (onboarding steps, /stop, active real/AI chats).
@@ -21,15 +45,126 @@ import { CITIES } from "./premiumHandler.js";
 export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
   const currentState = userState.get(userId);
 
+  const isStopCmd =
+    text === "/stop" ||
+    text === "🛑 Stop" ||
+    text === "Stop" ||
+    text?.toLowerCase() === "stop";
+
+  const isNextCmd =
+    text === "➡️ Keyingisi" ||
+    text === "Keyingisi" ||
+    text?.toLowerCase() === "keyingisi";
+
   // ==========================================
-  // 1. ISM, YOSH VA VILOYATNI OLISH BOSQICHLARI
+  // 1. /STOP VA KEYINGISI BUYRUQLARI
+  // ==========================================
+  if (isStopCmd) {
+    if (currentState === "searching_partner") {
+      cancelSearch(userId);
+      await ctx.reply(
+        "🚪 Sherik qidirish bekor qilindi. Asosiy menuga qaytdingiz.",
+        userKeyboard,
+      );
+      return true;
+    }
+
+    if (currentState === "real_chatting") {
+      const msg = await stopRealChat(bot, userId);
+      await ctx.reply(msg, userKeyboard);
+      return true;
+    }
+
+    if (currentState === "ai_chatting") {
+      userState.delete(userId);
+      activePartner.delete(userId);
+      clearAiSession(userId);
+      await ctx.reply(
+        "🚪 Tanishuv chatidan chiqdingiz. Asosiy menuga qaytdingiz.",
+        userKeyboard,
+      );
+      return true;
+    }
+
+    if (
+      currentState === "awaiting_name" ||
+      currentState === "awaiting_age" ||
+      currentState === "awaiting_city"
+    ) {
+      userState.delete(userId);
+      tempUserData.delete(userId);
+      await ctx.reply(
+        "🚪 Tanishuv bekor qilindi. Asosiy menuga qaytdingiz.",
+        userKeyboard,
+      );
+      return true;
+    }
+
+    await ctx.reply(
+      "ℹ️ Hozirda aktiv tanishuv chati yoki qidiruv yo'q.",
+      userKeyboard,
+    );
+    return true;
+  }
+
+  if (isNextCmd) {
+    if (currentState === "searching_partner") {
+      cancelSearch(userId);
+    } else if (currentState === "real_chatting") {
+      await stopRealChat(bot, userId);
+    } else if (currentState === "ai_chatting") {
+      userState.delete(userId);
+      activePartner.delete(userId);
+      clearAiSession(userId);
+    } else if (
+      currentState === "awaiting_name" ||
+      currentState === "awaiting_age" ||
+      currentState === "awaiting_city"
+    ) {
+      userState.delete(userId);
+      tempUserData.delete(userId);
+    }
+
+    if (!dbUser.gender) {
+      await ctx.reply(
+        "✨ Tanishuv bo'limiga xush kelibsiz!\n\nIltimos, avval jinsingizni tanlang:",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "👨 Erkak", callback_data: "gender_male" }],
+              [{ text: "👩 Qiz bola", callback_data: "gender_female" }],
+            ],
+          },
+        },
+      );
+      return true;
+    }
+
+    if (!dbUser.name || !dbUser.age) {
+      userState.set(userId, "awaiting_name");
+      await ctx.reply("📝 Ismingizni kiriting:");
+      return true;
+    }
+
+    if (dbUser.hasActivePremium()) {
+      await promptVipGenderChoice(ctx);
+      return true;
+    }
+
+    await ctx.reply("🔄 Keyingi sherik qidirilmoqda...", tanishuvKeyboard);
+    await startUserSearch(bot, ctx, dbUser);
+    return true;
+  }
+
+  // ==========================================
+  // 2. ISM, YOSH VA VILOYATNI OLISH BOSQICHLARI
   // ==========================================
   if (currentState === "awaiting_name") {
     tempUserData.set(userId, { name: text });
     userState.set(userId, "awaiting_age");
     await ctx.reply(
       `Ajoyib, **${text}**! Endi yoshingizni kiriting (Masalan: 20):`,
-      { parse_mode: "Markdown" }
+      { parse_mode: "Markdown" },
     );
     return true;
   }
@@ -38,7 +173,7 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
     const age = parseInt(text);
     if (isNaN(age) || age < 10 || age > 90) {
       await ctx.reply(
-        "⚠️ Iltimos, yoshingizni to'g'ri raqamda kiriting (Masalan: 20):"
+        "⚠️ Iltimos, yoshingizni to'g'ri raqamda kiriting (Masalan: 20):",
       );
       return true;
     }
@@ -49,21 +184,20 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
 
     userState.set(userId, "awaiting_city");
 
-    const cityButtons = CITIES.map((c) => [{ text: `📍 ${c}`, callback_data: `onboard_city_${c}` }]);
+    const cityButtons = CITIES.map((c) => [
+      { text: `📍 ${c}`, callback_data: `onboard_city_${c}` },
+    ]);
 
-    await ctx.reply(
-      `Ajoyib! Endi yashaydigan viloyatingizni tanlang:`,
-      {
-        reply_markup: {
-          inline_keyboard: cityButtons,
-        },
-      }
-    );
+    await ctx.reply(`Ajoyib! Endi yashaydigan viloyatingizni tanlang:`, {
+      reply_markup: {
+        inline_keyboard: cityButtons,
+      },
+    });
     return true;
   }
 
   // ==========================================
-  // 2. TANISHUV BO'LIMI TUGMASI ("💬 Tanishuv" / "🔥 Tanishuv")
+  // 3. TANISHUV BO'LIMI TUGMASI ("💬 Tanishuv" / "🔥 Tanishuv")
   // ==========================================
   if (text === "💬 Tanishuv" || text === "🔥 Tanishuv") {
     if (!dbUser.gender) {
@@ -76,7 +210,7 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
               [{ text: "👩 Qiz bola", callback_data: "gender_female" }],
             ],
           },
-        }
+        },
       );
       return true;
     }
@@ -89,55 +223,35 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
 
     if (currentState === "searching_partner") {
       await ctx.reply(
-        "🔎 Siz allaqachon real sherik qidiryapsiz. Kuting...\n\n❌ Qidiruvni bekor qilish uchun: /stop deb yozing."
+        "🔎 Siz allaqachon real sherik qidiryapsiz. Kuting...\n\n❌ Qidiruvni bekor qilish uchun 🛑 Stop bosing.",
+        tanishuvKeyboard,
       );
       return true;
     }
 
     if (currentState === "real_chatting") {
       await ctx.reply(
-        "💬 Siz allaqachon real foydalanuvchi bilan suhbatdasiz.\n\n❌ Suhbatni yakunlash uchun: /stop deb yozing."
+        "💬 Siz allaqachon real foydalanuvchi bilan suhbatdasiz.\n\n❌ Suhbatni yakunlash uchun 🛑 Stop, keyingisiga o'tish uchun ➡️ Keyingisi bosing.",
+        tanishuvKeyboard,
       );
       return true;
     }
 
     if (currentState === "ai_chatting") {
       await ctx.reply(
-        "🤖 Siz allaqachon AI hamrohingiz bilan suhbatdasiz.\n\n❌ Suhbatdan chiqish uchun: /stop deb yozing."
+        "🤖 Siz allaqachon AI hamrohingiz bilan suhbatdasiz.\n\n❌ Suhbatdan chiqish uchun 🛑 Stop, keyingisiga o'tish uchun ➡️ Keyingisi bosing.",
+        tanishuvKeyboard,
       );
+      return true;
+    }
+
+    if (dbUser.hasActivePremium()) {
+      await promptVipGenderChoice(ctx);
       return true;
     }
 
     // Sherik qidiruvni boshlaymiz
     await startUserSearch(bot, ctx, dbUser);
-    return true;
-  }
-
-  // ==========================================
-  // 3. /STOP BUYRUG'I (SUHBAT / QIDIRUVNI TO'XTATISH)
-  // ==========================================
-  if (text === "/stop") {
-    if (currentState === "searching_partner") {
-      cancelSearch(userId);
-      await ctx.reply("🚪 Sherik qidirish bekor qilindi. Asosiy menuga qaytdingiz.");
-      return true;
-    }
-
-    if (currentState === "real_chatting") {
-      const msg = await stopRealChat(bot, userId);
-      await ctx.reply(msg);
-      return true;
-    }
-
-    if (currentState === "ai_chatting") {
-      userState.delete(userId);
-      activePartner.delete(userId);
-      clearAiSession(userId);
-      await ctx.reply("🚪 Tanishuv chatidan chiqdingiz. Asosiy menuga qaytdingiz.");
-      return true;
-    }
-
-    await ctx.reply("ℹ️ Hozirda aktiv tanishuv chati yoki qidiruv yo'q.");
     return true;
   }
 
@@ -161,7 +275,19 @@ export async function handleTanishuvText(bot, ctx, text, userId, dbUser) {
 
     let partner = activePartner.get(userId);
     if (!partner) {
-      partner = getRandomPartner(dbUser.gender || "male");
+      if (dbUser.hasActivePremium() && dbUser.selectedAiPartner) {
+        partner = { name: dbUser.selectedAiPartner, age: 20 };
+      } else if (
+        dbUser.hasActivePremium() &&
+        dbUser.prefGender &&
+        dbUser.prefGender !== "any"
+      ) {
+        const targetList =
+          dbUser.prefGender === "female" ? femalePartners : malePartners;
+        partner = targetList[Math.floor(Math.random() * targetList.length)];
+      } else {
+        partner = getRandomPartner(dbUser.gender || "male");
+      }
       activePartner.set(userId, partner);
     }
 
@@ -244,7 +370,37 @@ export async function handleTanishuvCallback(ctx, data, userId, bot) {
       { parse_mode: "HTML" }
     );
 
-    await startUserSearch(bot, ctx, updatedUser);
+    if (updatedUser.hasActivePremium()) {
+      await promptVipGenderChoice(ctx);
+    } else {
+      await startUserSearch(bot, ctx, updatedUser);
+    }
+    return true;
+  }
+
+  if (data.startsWith("tanishuv_pref_")) {
+    const selectedPref = data.replace("tanishuv_pref_", "");
+    const dbUser = await User.findOne({ telegramId: userId });
+    if (!dbUser) return false;
+
+    dbUser.prefGender = selectedPref;
+    await dbUser.save();
+
+    await ctx.answerCbQuery("✅ Saqlandi!");
+
+    const prefLabel =
+      selectedPref === "female"
+        ? "👩 Qizlar"
+        : selectedPref === "male"
+        ? "👨 O'g'il bolalar / Yigitlar"
+        : "🌐 Har qanday jins";
+
+    await ctx.editMessageText(
+      `🎯 <b>Sherik jinsi saqlandi:</b> ${prefLabel}\n\nSherik qidirilmoqda...`,
+      { parse_mode: "HTML" },
+    );
+
+    await startUserSearch(bot, ctx, dbUser);
     return true;
   }
 

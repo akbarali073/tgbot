@@ -62,6 +62,7 @@ export async function handlePremiumText(bot, ctx, text, userId, dbUser) {
       `💎 <b>VIP Premium Imkoniyatlar !</b>\n\n` +
         `Botda eng qulay va qiziqarli muloqot tajribasiga ega bo'ling:\n\n` +
         `⚡️ <b>Navbatsiz va Tezkor Ulanish:</b> Kutishlarsiz birinchi bo'lib real sheriklar bilan ulaning!\n` +
+        `👥 Afzal jins Suhbatdoshingizning jinsini o'zingiz tanlay olasiz Erkak/Ayol.\n` +
         `🎯 <b>Viloyat va Jins Filtrlar:</b> Aynan o'zingiz xohlagan shahardan sherik toping!\n` +
         `🤖 <b>Cheksiz AI Suhbat:</b> Hech qanday limit va reklamasiz AI hamrohingiz bilan gurunglashing!\n` +
         `📸 <b>Media Uzatish:</b> Real suhbatda rasm, ovozli xabarlar va stikerlar yuboring!\n` +

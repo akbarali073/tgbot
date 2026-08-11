@@ -42,8 +42,19 @@ export function setupMainHandlers(bot) {
         dbUser = await User.create({ telegramId: userId });
       }
 
-      // If user is in real_chatting state and sends media or text (not /stop)
-      if (userState.get(userId) === "real_chatting" && text !== "/stop") {
+      const isStopCmd =
+        text === "/stop" ||
+        text === "🛑 Stop" ||
+        text === "Stop" ||
+        text?.toLowerCase() === "stop";
+
+      const isNextCmd =
+        text === "➡️ Keyingisi" ||
+        text === "Keyingisi" ||
+        text?.toLowerCase() === "keyingisi";
+
+      // If user is in real_chatting state and sends media or text (not stop/next commands)
+      if (userState.get(userId) === "real_chatting" && !isStopCmd && !isNextCmd) {
         await forwardMessageToPartner(bot, ctx, userId, dbUser);
         return;
       }

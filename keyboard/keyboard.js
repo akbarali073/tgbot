@@ -22,3 +22,12 @@ export const userKeyboard = {
     one_time_keyboard: false,
   },
 };
+
+export const tanishuvKeyboard = {
+  reply_markup: {
+    keyboard: [[{ text: "🛑 Stop" }, { text: "➡️ Keyingisi" }]],
+    resize_keyboard: true,
+    one_time_keyboard: false,
+  },
+};
+
